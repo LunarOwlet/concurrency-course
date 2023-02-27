@@ -1,7 +1,8 @@
 package course.concurrency.m2_async.cf.min_price;
 
-import java.util.Collection;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 public class PriceAggregator {
 
@@ -18,7 +19,25 @@ public class PriceAggregator {
     }
 
     public double getMinPrice(long itemId) {
-        // здесь будет ваш код
-        return 0;
+        List<CompletableFuture<Double>> futures = new ArrayList<>();
+        shopIds.forEach(shopId -> futures.add(getFuturePrice(itemId, shopId)));
+
+        return futures.stream()
+                .map(CompletableFuture::join)
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(Double.NaN);
+    }
+
+    private CompletableFuture<Double> getFuturePrice(long itemId, long shopId) {
+        return CompletableFuture.supplyAsync(() -> priceRetriever.getPrice(itemId, shopId))
+                .completeOnTimeout(null, 2900, TimeUnit.MILLISECONDS)
+                .handle((res, ex) -> {
+                    if (ex != null) {
+                        System.out.println("Getting price for #" + itemId + " item from shop #" + shopId + " failed with exception: " + ex);
+                        return null;
+                    }
+                    return res;
+                });
     }
 }
